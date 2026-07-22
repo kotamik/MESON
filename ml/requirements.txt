@@ -1,0 +1,2 @@
+# numpy only. the neural net surrogate is hand-rolled, no pytorch/sklearn.
+numpy>=1.24
