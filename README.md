@@ -14,7 +14,7 @@ py serve.py                        # serves http://localhost:8000
 
 Then open http://localhost:8000 in a browser.
 
-To (optionally) run the offline constellation optimizer:
+To (optionally) run the offline constellation optimizer (can take up to 2 hours to finish):
 
 ```bash
 pip install -r ml/requirements.txt
