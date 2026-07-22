@@ -23,13 +23,13 @@ py ml/optimize_constellation.py    # writes ml/best_constellation.json
 
 ## Guide
 
-- **Camera** — click any body (or satellite) to follow it; drag to orbit, scroll
+- **Camera** click any body (or satellite) to follow it; drag to orbit, scroll
   to zoom. The focus buttons (System / Sun / Earth / Moon) do the same.
-- **Time** — Pause/Play and the speed slider (minutes to years per second).
-- **Add satellite** — pick a parent (Earth or Moon) and orbital elements, then
+- **Time** Pause/Play and the speed slider (minutes to years per second).
+- **Add satellite** pick a parent (Earth or Moon) and orbital elements, then
   *Add satellite*. Satellites feel the real gravity of all three bodies; one that
-  decays into a body is destroyed instead of being flung away.
-- **Optimizer** — *Train* runs the in-browser genetic algorithm live; *Deploy
+  decays into a body is destroyed.
+- **Optimizer** *Train* runs the in-browser genetic algorithm live; *Deploy
   best* flies its current best around the Moon. *Import Python result* loads the
   design from the offline pipeline (`ml/best_constellation.json`). The south-pole
   marker turns green whenever a satellite has line of sight.
