@@ -77,8 +77,6 @@ GENES = 6
 # the slow earth-driven kozai cycles play out many times over during the search,
 # so the GA can't reward an orbit that just survives a short horizon and then
 # falls apart. this is what closes the sim-to-real gap with the sandbox.
-# heads up: a 2-year window is ~12x the old 60-day one, so a full run takes a
-# while (tens of minutes). that's the price of designing against a real lifetime.
 DURATION     = 2 * YEAR
 DT           = 600.0          # 10-min steps, fine enough to catch short outages
                               # so the GA can't hide a gap between samples
