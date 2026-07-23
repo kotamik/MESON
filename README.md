@@ -1,4 +1,4 @@
-# Sun Earth Moon Sandbox
+# MESON
 
 A 3D N-body sandbox of the Sun–Earth–Moon system with live gravity, custom
 satellites, and an optimizer that designs the smallest satellite constellation
