@@ -1,2 +1,5 @@
-# numpy only. the neural net surrogate is hand-rolled, no pytorch/sklearn.
+# the neural net surrogate is hand-rolled (no pytorch/sklearn).
+# numba jits + parallelizes the physics loops - it's what makes the run fast.
+# without it the script still works, just single-core and much slower.
 numpy>=1.24
+numba>=0.59

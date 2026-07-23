@@ -20,16 +20,39 @@
 # drives kozai cycles that wreck a naive "frozen" orbit, so modelling the whole
 # field is exactly what makes the result hold up once it's flying in the sandbox.
 #
-# the whole population integrates at once (vectorised over every sat). over the
-# 2-year mission window a full search still lands in the tens-of-minutes range.
+# the hot loops (the big-body ephemeris and the per-generation sat propagation)
+# are numba-jitted, and the population is evaluated one-genome-per-core with
+# prange, so a full 2-year search runs in a couple of minutes on all cores
+# instead of grinding through it single-threaded. no numba installed? it falls
+# back to a pure-numpy path automatically - correct, just slower.
 #
 # spits out ml/best_constellation.json (the sandbox can import it) + a history csv.
-# needs numpy, nothing else. run:  py ml/optimize_constellation.py
+# needs numpy + numba (see requirements.txt). run:  py ml/optimize_constellation.py
 import json
 import os
 import sys
 import time
+import math
 import numpy as np
+
+# numba does the heavy lifting: it JIT-compiles the tight integration loops to
+# native code and runs the population evaluation across every cpu core (prange).
+# if it isn't installed we fall back to plain numpy - correct, just slower and
+# single-core - so the script still runs. `pip install numba` for the fast path.
+try:
+    from numba import njit, prange, get_num_threads
+    HAVE_NUMBA = True
+except Exception:
+    HAVE_NUMBA = False
+
+    def njit(*args, **kwargs):
+        return args[0] if (args and callable(args[0])) else (lambda fn: fn)
+
+    def prange(*a):
+        return range(*a)
+
+    def get_num_threads():
+        return 1
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -78,8 +101,9 @@ GENES = 6
 # so the GA can't reward an orbit that just survives a short horizon and then
 # falls apart. this is what closes the sim-to-real gap with the sandbox.
 DURATION     = 2 * YEAR
-DT           = 600.0          # 10-min steps, fine enough to catch short outages
-                              # so the GA can't hide a gap between samples
+DT           = 300.0          # 5-min steps. numba makes this cheap, so the GA now
+                              # scores at the same fidelity it's verified at - no
+                              # coarse-sampling gaps for it to hide a real outage in
 MIN_ELEV     = 5 * DEG
 MIN_PERI_ALT = 100e3
 APO_SOFT     = 9000e3         # apoapsis altitude past which perturbations start to bite
@@ -148,6 +172,44 @@ def _accel_bodies(P, GMs):
     return A
 
 
+# --- numba kernels: 3-body ephemeris integration -----------------------------
+@njit
+def _acc3(P, GMs):
+    A = np.zeros((3, 3))
+    for i in range(3):
+        for j in range(3):
+            if i == j:
+                continue
+            dx = P[j, 0] - P[i, 0]; dy = P[j, 1] - P[i, 1]; dz = P[j, 2] - P[i, 2]
+            r2 = dx * dx + dy * dy + dz * dz
+            inv = GMs[j] / (r2 * math.sqrt(r2))
+            A[i, 0] += inv * dx; A[i, 1] += inv * dy; A[i, 2] += inv * dz
+    return A
+
+
+@njit
+def _prop_bodies3(n, hdt, P0, V0, GMs):
+    sunP = np.empty((n, 3)); earthP = np.empty((n, 3)); moonP = np.empty((n, 3))
+    P = P0.copy(); V = V0.copy()
+    h2 = hdt * 0.5
+    for k in range(n):
+        sunP[k, 0] = P[0, 0]; sunP[k, 1] = P[0, 1]; sunP[k, 2] = P[0, 2]
+        earthP[k, 0] = P[1, 0]; earthP[k, 1] = P[1, 1]; earthP[k, 2] = P[1, 2]
+        moonP[k, 0] = P[2, 0]; moonP[k, 1] = P[2, 1]; moonP[k, 2] = P[2, 2]
+        if k == n - 1:
+            break
+        A1 = _acc3(P, GMs)
+        P2 = P + V * h2;  V2 = V + A1 * h2
+        A2 = _acc3(P2, GMs)
+        P3 = P + V2 * h2; V3 = V + A2 * h2
+        A3 = _acc3(P3, GMs)
+        P4 = P + V3 * hdt; V4 = V + A3 * hdt
+        A4 = _acc3(P4, GMs)
+        P = P + (hdt / 6.0) * (V + 2.0 * V2 + 2.0 * V3 + V4)
+        V = V + (hdt / 6.0) * (A1 + 2.0 * A2 + 2.0 * A3 + A4)
+    return sunP, earthP, moonP
+
+
 def build_ephemeris(duration, hdt):
     key = (duration, hdt)
     if key in _EPH:
@@ -162,20 +224,23 @@ def build_ephemeris(duration, hdt):
     moon0 = dict(pos=P[2].copy(), vel=V[2].copy())
 
     n = int(round(duration / hdt)) + 1
-    sunP = np.empty((n, 3)); earthP = np.empty((n, 3)); moonP = np.empty((n, 3))
-    for k in range(n):
-        sunP[k], earthP[k], moonP[k] = P[0], P[1], P[2]
-        if k == n - 1:
-            break
-        a1 = _accel_bodies(P, GMs)
-        P2 = P + V * hdt / 2; V2 = V + a1 * hdt / 2
-        a2 = _accel_bodies(P2, GMs)
-        P3 = P + V2 * hdt / 2; V3 = V + a2 * hdt / 2
-        a3 = _accel_bodies(P3, GMs)
-        P4 = P + V3 * hdt; V4 = V + a3 * hdt
-        a4 = _accel_bodies(P4, GMs)
-        P = P + (hdt / 6) * (V + 2 * V2 + 2 * V3 + V4)
-        V = V + (hdt / 6) * (a1 + 2 * a2 + 2 * a3 + a4)
+    if HAVE_NUMBA:
+        sunP, earthP, moonP = _prop_bodies3(n, float(hdt), P.copy(), V.copy(), GMs)
+    else:
+        sunP = np.empty((n, 3)); earthP = np.empty((n, 3)); moonP = np.empty((n, 3))
+        for k in range(n):
+            sunP[k], earthP[k], moonP[k] = P[0], P[1], P[2]
+            if k == n - 1:
+                break
+            a1 = _accel_bodies(P, GMs)
+            P2 = P + V * hdt / 2; V2 = V + a1 * hdt / 2
+            a2 = _accel_bodies(P2, GMs)
+            P3 = P + V2 * hdt / 2; V3 = V + a2 * hdt / 2
+            a3 = _accel_bodies(P3, GMs)
+            P4 = P + V3 * hdt; V4 = V + a3 * hdt
+            a4 = _accel_bodies(P4, GMs)
+            P = P + (hdt / 6) * (V + 2 * V2 + 2 * V3 + V4)
+            V = V + (hdt / 6) * (a1 + 2 * a2 + 2 * a3 + a4)
     eph = dict(hdt=hdt, n=n, sunP=sunP, earthP=earthP, moonP=moonP, moon0=moon0)
     _EPH[key] = eph
     return eph
@@ -212,6 +277,8 @@ def _accel_sat(R, idx, eph):
 
 
 def integrate_visibility(states0, eph, dt, sin_min, steps):
+    # pure-numpy propagation, kept for the honest final verification and as the
+    # no-numba fallback. returns per-sat (visibility, crashed-mask).
     R = states0[:, :3].copy()
     V = states0[:, 3:].copy()
     M = R.shape[0]
@@ -242,6 +309,115 @@ def integrate_visibility(states0, eph, dt, sin_min, steps):
             R = R + (dt / 6) * (V + 2 * V2 + 2 * V3 + V4)
             V = V + (dt / 6) * (a1 + 2 * a2 + 2 * a3 + a4)
     return vis, ~alive                             # (visibility, crashed-mask)
+
+
+# --- numba kernels: whole-population propagation + coverage -------------------
+# one genome per parallel task. each integrates its own satellites over the full
+# window and folds down to coverage / max-gap / avg-in-view / deorbit-count, so
+# there's no giant M x steps visibility matrix and no cross-task synchronisation.
+@njit
+def _sat_acc(x, y, z, idx, sunP, earthP, moonP):
+    dx = sunP[idx, 0] - x; dy = sunP[idx, 1] - y; dz = sunP[idx, 2] - z
+    r2 = dx * dx + dy * dy + dz * dz; g = GM_SUN / (r2 * math.sqrt(r2))
+    ax = g * dx; ay = g * dy; az = g * dz
+    dx = earthP[idx, 0] - x; dy = earthP[idx, 1] - y; dz = earthP[idx, 2] - z
+    r2 = dx * dx + dy * dy + dz * dz; g = GM_EARTH / (r2 * math.sqrt(r2))
+    ax += g * dx; ay += g * dy; az += g * dz
+    dx = moonP[idx, 0] - x; dy = moonP[idx, 1] - y; dz = moonP[idx, 2] - z
+    r2 = dx * dx + dy * dy + dz * dz; g = GM_MOON / (r2 * math.sqrt(r2))
+    ax += g * dx; ay += g * dy; az += g * dz
+    return ax, ay, az
+
+
+@njit(parallel=True)
+def _eval_pop_kernel(states0, ns, sunP, earthP, moonP, dt, sin_min,
+                     R_moon, escape, south, steps):
+    P = states0.shape[0]
+    max_n = states0.shape[1]
+    cov = np.zeros(P); gap = np.zeros(P); avgv = np.zeros(P)
+    deo = np.zeros(P, dtype=np.int64)
+    s0 = south[0]; s1 = south[1]; s2 = south[2]
+    esc2 = escape * escape
+    Rm2 = R_moon * R_moon
+    hdt = dt * 0.5
+    dt6 = dt / 6.0
+    T = steps + 1
+    for p in prange(P):
+        n = ns[p]
+        rx = np.empty(max_n); ry = np.empty(max_n); rz = np.empty(max_n)
+        vx = np.empty(max_n); vy = np.empty(max_n); vz = np.empty(max_n)
+        alive = np.ones(max_n, dtype=np.bool_)
+        for j in range(n):
+            rx[j] = states0[p, j, 0]; ry[j] = states0[p, j, 1]; rz[j] = states0[p, j, 2]
+            vx[j] = states0[p, j, 3]; vy[j] = states0[p, j, 4]; vz[j] = states0[p, j, 5]
+        covered = 0; sumv = 0.0; curgap = 0.0; maxgap = 0.0; ndeo = 0
+        for k in range(T):
+            ei = 2 * k
+            mpx = moonP[ei, 0]; mpy = moonP[ei, 1]; mpz = moonP[ei, 2]
+            plx = mpx + s0 * R_moon; ply = mpy + s1 * R_moon; plz = mpz + s2 * R_moon
+            nvis = 0
+            for j in range(n):
+                if not alive[j]:
+                    continue
+                x = rx[j]; y = ry[j]; z = rz[j]
+                ddx = x - mpx; ddy = y - mpy; ddz = z - mpz
+                dm2 = ddx * ddx + ddy * ddy + ddz * ddz
+                ro2 = x * x + y * y + z * z
+                if dm2 != dm2 or dm2 <= Rm2 or ro2 > esc2:   # nan / crashed / flung
+                    alive[j] = False; ndeo += 1; continue
+                ex = x - plx; ey = y - ply; ez = z - plz
+                d = math.sqrt(ex * ex + ey * ey + ez * ez)
+                if d < 1e-3:
+                    d = 1e-3
+                if (ex * s0 + ey * s1 + ez * s2) / d >= sin_min:
+                    nvis += 1
+            sumv += nvis
+            if nvis > 0:
+                covered += 1; curgap = 0.0
+            else:
+                curgap += dt
+                if curgap > maxgap:
+                    maxgap = curgap
+            if k == steps:
+                break
+            for j in range(n):
+                if not alive[j]:
+                    continue
+                x = rx[j]; y = ry[j]; z = rz[j]; ax0 = vx[j]; ay0 = vy[j]; az0 = vz[j]
+                a1x, a1y, a1z = _sat_acc(x, y, z, ei, sunP, earthP, moonP)
+                x2 = x + ax0 * hdt; y2 = y + ay0 * hdt; z2 = z + az0 * hdt
+                v2x = ax0 + a1x * hdt; v2y = ay0 + a1y * hdt; v2z = az0 + a1z * hdt
+                a2x, a2y, a2z = _sat_acc(x2, y2, z2, ei + 1, sunP, earthP, moonP)
+                x3 = x + v2x * hdt; y3 = y + v2y * hdt; z3 = z + v2z * hdt
+                v3x = ax0 + a2x * hdt; v3y = ay0 + a2y * hdt; v3z = az0 + a2z * hdt
+                a3x, a3y, a3z = _sat_acc(x3, y3, z3, ei + 1, sunP, earthP, moonP)
+                x4 = x + v3x * dt; y4 = y + v3y * dt; z4 = z + v3z * dt
+                v4x = ax0 + a3x * dt; v4y = ay0 + a3y * dt; v4z = az0 + a3z * dt
+                a4x, a4y, a4z = _sat_acc(x4, y4, z4, ei + 2, sunP, earthP, moonP)
+                rx[j] = x + dt6 * (ax0 + 2.0 * v2x + 2.0 * v3x + v4x)
+                ry[j] = y + dt6 * (ay0 + 2.0 * v2y + 2.0 * v3y + v4y)
+                rz[j] = z + dt6 * (az0 + 2.0 * v2z + 2.0 * v3z + v4z)
+                vx[j] = ax0 + dt6 * (a1x + 2.0 * a2x + 2.0 * a3x + a4x)
+                vy[j] = ay0 + dt6 * (a1y + 2.0 * a2y + 2.0 * a3y + a4y)
+                vz[j] = az0 + dt6 * (a1z + 2.0 * a2z + 2.0 * a3z + a4z)
+        cov[p] = covered / float(T); avgv[p] = sumv / float(T)
+        gap[p] = maxgap; deo[p] = ndeo
+    return cov, gap, avgv, deo
+
+
+def _pop_stats_numpy(states0, ns, eph, dt, sin_min, steps, P, max_n):
+    # fallback: run the numpy propagator and fold it down the same way the kernel does
+    vis, crashed = integrate_visibility(states0, eph, dt, sin_min, steps)
+    vis = vis.reshape(P, max_n, -1)
+    crashed = crashed.reshape(P, max_n)
+    active = (np.arange(max_n)[None, :] < ns[:, None])
+    nvis = (vis * active[:, :, None]).sum(axis=1)
+    covered = nvis > 0
+    cov = covered.mean(axis=1)
+    avgv = nvis.mean(axis=1)
+    gap = np.array([longest_gap(covered[p], dt) for p in range(P)], dtype=np.float64)
+    deo = (crashed & active).sum(axis=1)
+    return cov, gap, avgv, deo
 
 
 def longest_gap(covered, dt):
@@ -280,26 +456,28 @@ def fitness_from_stats(el, n, stats):
 
 def evaluate_population(genomes, max_n, eph, dt=DT):
     P = len(genomes)
-    sin_min = np.sin(MIN_ELEV)
+    sin_min = float(np.sin(MIN_ELEV))
     steps = int(round((eph["n"] - 1) / 2))
     all_genes = np.array([g[1].reshape(max_n, GENES) for g in genomes]).reshape(-1, GENES)
     el_all = decode(all_genes)
     states0 = initial_states(el_all, eph)
-    vis, crashed = integrate_visibility(states0, eph, dt, sin_min, steps)
-    vis = vis.reshape(P, max_n, -1)
-    crashed = crashed.reshape(P, max_n)
-    ns = np.array([g[0] for g in genomes])
-    active = (np.arange(max_n)[None, :] < ns[:, None])
-    nvis = (vis * active[:, :, None]).sum(axis=1)
-    covered = nvis > 0
-    coverage = covered.mean(axis=1)
-    avg_vis = nvis.mean(axis=1)
+    ns = np.array([g[0] for g in genomes], dtype=np.int64)
+    if HAVE_NUMBA:
+        s0 = np.ascontiguousarray(states0.reshape(P, max_n, 6))
+        cov, gap, avgv, deo = _eval_pop_kernel(
+            s0, ns,
+            np.ascontiguousarray(eph["sunP"]), np.ascontiguousarray(eph["earthP"]),
+            np.ascontiguousarray(eph["moonP"]),
+            float(dt), sin_min, float(R_MOON), float(ESCAPE),
+            np.ascontiguousarray(SOUTH_DIR), int(steps))
+    else:
+        cov, gap, avgv, deo = _pop_stats_numpy(states0, ns, eph, dt, sin_min, steps, P, max_n)
     el_r = el_all.reshape(P, max_n, GENES)
     out = []
     for p in range(P):
         n = int(ns[p])
-        stats = dict(coverage=float(coverage[p]), max_gap=longest_gap(covered[p], dt),
-                     avg_visible=float(avg_vis[p]), deorbits=int(crashed[p, :n].sum()))
+        stats = dict(coverage=float(cov[p]), max_gap=float(gap[p]),
+                     avg_visible=float(avgv[p]), deorbits=int(deo[p]))
         out.append((fitness_from_stats(el_r[p, :n], n, stats), stats))
     return out
 
@@ -424,6 +602,10 @@ def main():
     print("=" * 72)
     print(" lunar south-pole constellation optimizer")
     print(" GA + numpy MLP surrogate  ·  full sun+earth+moon n-body (sandbox-exact)")
+    if HAVE_NUMBA:
+        print(f" backend: numba, {get_num_threads()} threads  (compiling kernels on first call...)")
+    else:
+        print(" backend: numpy fallback (single-core). run 'pip install numba' for a big speedup.")
     print("=" * 72)
     t0 = time.time()
     best, history = optimise()
@@ -431,20 +613,21 @@ def main():
     n = genome[0]
     el = decode(genome[1].reshape(-1, GENES)[:n])
 
-    # honest re-check over the full 2-year window at a finer step (5-min) than
-    # the GA used, so the reported numbers aren't just the search's own scoring.
+    # honest re-check over the full 2-year window at a finer step (2.5-min) than
+    # the GA's 5-min, and with the independent numpy propagator, so the reported
+    # numbers aren't just the search's own scoring played back to itself.
     verify_dur = 2 * YEAR
-    eph = build_ephemeris(verify_dur, 150.0)
+    eph = build_ephemeris(verify_dur, 75.0)
     states0 = initial_states(el, eph)
     steps = int(round((eph["n"] - 1) / 2))
-    vis, crashed = integrate_visibility(states0, eph, 300.0, np.sin(MIN_ELEV), steps)
+    vis, crashed = integrate_visibility(states0, eph, 150.0, np.sin(MIN_ELEV), steps)
     nvis = vis.sum(axis=0); covered = nvis > 0
-    coverage = covered.mean(); max_gap = longest_gap(covered, 300.0); avg_vis = nvis.mean()
+    coverage = covered.mean(); max_gap = longest_gap(covered, 150.0); avg_vis = nvis.mean()
     deorbits = int(crashed.sum())
 
     print("\n" + "-" * 72)
     print(f" BEST CONSTELLATION  ({n} satellites)   fitness = {F:.2f}")
-    print(f"   [verified: 2-year full Sun+Earth+Moon propagation, 5-min step]")
+    print(f"   [verified: 2-year full Sun+Earth+Moon propagation, 2.5-min step]")
     print(f"   coverage    : {coverage*100:.3f} %  of the time")
     print(f"   max outage  : {max_gap/3600:.2f} h")
     print(f"   avg in view : {avg_vis:.2f} satellites")
