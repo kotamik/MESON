@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Sun · Earth · Moon — N-body Sandbox + Lunar Constellation Optimizer</title>
+<title>MESON</title>
 <style>
-  /* plain dark theme. boxy panels, flat colors, no gradients/blur/shadow. */
   :root{
     --bg:#0a0a0c; --panel:#141418; --panel2:#1d1d22; --line:#3a3a42;
     --txt:#cfcfcf; --dim:#7c7c85; --accent:#5b8fd6; --good:#5ac66f; --bad:#e05a5a;
@@ -39,7 +38,6 @@
   button.good{background:#1c3a24;border-color:var(--good);color:var(--good)}
   .kv{display:flex;justify-content:space-between}
   .kv b{color:#fff;font-weight:600}
-  /* status tag, boxy not a rounded pill */
   .pill{display:inline-block;padding:1px 7px;border:1px solid;font-size:11px;font-weight:600}
   .pill.up{background:#173322;color:var(--good);border-color:var(--good)}
   .pill.down{background:#331717;color:var(--bad);border-color:var(--bad)}
@@ -55,7 +53,7 @@
   <div id="scene"></div>
 
   <div class="panel" id="left">
-    <h1>Sun · Earth · Moon Sandbox</h1>
+    <h1>MESON</h1>
     <div class="sub">Real J2000 elements · live N-body (RK4) · true scale</div>
 
     <h2>Time</h2>
