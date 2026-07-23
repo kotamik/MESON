@@ -36,8 +36,6 @@ import numpy as np
 
 # numba does the heavy lifting: it JIT-compiles the tight integration loops to
 # native code and runs the population evaluation across every cpu core (prange).
-# if it isn't installed we fall back to plain numpy - correct, just slower and
-# single-core - so the script still runs. `pip install numba` for the fast path.
 try:
     from numba import njit, prange, get_num_threads
     HAVE_NUMBA = True
@@ -98,11 +96,11 @@ GENES = 6
 # GA window is two full years - a realistic mission lifetime. long enough that
 # the slow earth-driven kozai cycles play out many times over during the search,
 # so the GA can't reward an orbit that just survives a short horizon and then
-# falls apart. this is what closes the sim-to-real gap with the sandbox.
+# falls apart.
 DURATION     = 2 * YEAR
 DT           = 300.0          # 5-min steps. numba makes this cheap, so the GA now
-                              # scores at the same fidelity it's verified at - no
-                              # coarse-sampling gaps for it to hide a real outage in
+                              # scores at the same fidelity it's verified at
+
 MIN_ELEV     = 5 * DEG
 MIN_PERI_ALT = 100e3
 APO_SOFT     = 9000e3         # apoapsis altitude past which perturbations start to bite
@@ -276,7 +274,7 @@ def _accel_sat(R, idx, eph):
 
 
 def integrate_visibility(states0, eph, dt, sin_min, steps):
-    # pure-numpy propagation, kept for the honest final verification and as the
+    # pure-numpy propagation, kept for the final verification and as the
     # no-numba fallback. returns per-sat (visibility, crashed-mask).
     R = states0[:, :3].copy()
     V = states0[:, 3:].copy()
@@ -286,7 +284,7 @@ def integrate_visibility(states0, eph, dt, sin_min, steps):
     with np.errstate(all="ignore"):                # dead sats may go inf/nan; masked out anyway
         for k in range(steps + 1):
             ei = 2 * k
-            # deorbit check: hit the moon, went non-finite, or got flung out
+            # deorbit check: hit parent object, went non-finite, or got flung out
             Dm = R - eph["moonP"][ei][None, :]
             dm = np.sqrt(np.einsum("ij,ij->i", Dm, Dm))
             r_orig = np.sqrt(np.einsum("ij,ij->i", R, R))
@@ -612,8 +610,8 @@ def main():
     n = genome[0]
     el = decode(genome[1].reshape(-1, GENES)[:n])
 
-    # honest re-check over the full 2-year window at a finer step (2.5-min) than
-    # the GA's 5-min, and with the independent numpy propagator, so the reported
+    # re-check over the full 2-year window at a finer step (2.5-min) than the
+    # GA's 5-min, and with the independent numpy propagator, so the reported
     # numbers aren't just the search's own scoring played back to itself.
     verify_dur = 2 * YEAR
     eph = build_ephemeris(verify_dur, 75.0)
