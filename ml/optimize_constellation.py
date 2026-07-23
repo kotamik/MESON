@@ -23,8 +23,7 @@
 # the hot loops (the big-body ephemeris and the per-generation sat propagation)
 # are numba-jitted, and the population is evaluated one-genome-per-core with
 # prange, so a full 2-year search runs in a couple of minutes on all cores
-# instead of grinding through it single-threaded. no numba installed? it falls
-# back to a pure-numpy path automatically - correct, just slower.
+# instead of grinding through it single-threaded.
 #
 # spits out ml/best_constellation.json (the sandbox can import it) + a history csv.
 # needs numpy + numba (see requirements.txt). run:  py ml/optimize_constellation.py
