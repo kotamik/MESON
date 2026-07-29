@@ -1,7 +1,7 @@
 {
   "meta": {
     "description": "Optimised lunar south-pole constellation",
-    "generated": "2026-07-29 14:30:48",
+    "generated": "2026-07-29 14:40:17",
     "frame": "Moon-centred lunar-equatorial elements; SI units / radians",
     "dynamics": "Full Sun+Earth+Moon point-mass N-body, RK4 (matches sandbox)",
     "coverage": 0.9980012786113045,
