@@ -93,7 +93,7 @@ ESCAPE = 5 * EARTH_EL["a"]
 A_MIN = R_MOON + 150e3
 A_MAX = R_MOON + 8000e3
 E_MAX = cf.EMX
-GENES = cf.GNS
+GENES = 6
 
 # GA window is two full years - a realistic mission lifetime. long enough that
 # the slow earth-driven kozai cycles play out many times over during the search,
