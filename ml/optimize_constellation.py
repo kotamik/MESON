@@ -32,6 +32,7 @@ import os
 import sys
 import time
 import math
+import winsound
 import numpy as np
 import config as cf
 
@@ -59,7 +60,7 @@ except Exception:
 
 rng = np.random.default_rng(42)
 
-# real constants, kept in sync with src/constants.js
+# real constants, kept in sync with src/constants.js (don't edit)
 GM_SUN   = 1.32712440018e20
 GM_EARTH = 3.986004418e14
 GM_MOON  = 4.9028695e12
@@ -80,7 +81,7 @@ MOON_EL  = dict(a=3.84399e8, e=0.0549, i=5.145 * DEG, om=125.08 * DEG,
 
 # south pole direction in the ecliptic frame (equator tilted about x)
 SOUTH_DIR = np.array([0.0, np.sin(MOON_TILT), -np.cos(MOON_TILT)])
-# past this a sat has left the system - count it as deorbited (matches the sandbox)
+# past this a sat has left the system - count it as deorbited 
 ESCAPE = 5 * EARTH_EL["a"]
 
 # search bounds for one sat's normalised [0,1] genes.
@@ -633,6 +634,8 @@ def main():
     print("-" * 72)
     print(f"   {'#':>2} {'a(km)':>9} {'alt_peri':>9} {'alt_apo':>9} {'e':>6} "
           f"{'i(°)':>7} {'Ω(°)':>6} {'ω(°)':>6} {'T(h)':>6}")
+    if cf.CNS == True:
+        winsound.PlaySound("ding.wav", winsound.SND_FILENAME)
     sats = []
     for k in range(n):
         a, e, i, om, w, M = el[k]
