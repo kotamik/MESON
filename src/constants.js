@@ -3,6 +3,8 @@
 // numbers come from the usual places: iau 2009 constants, jpl de430, standish's
 // mean planetary elements, and nasa's lunar constants doc.
 
+// editing this will likely break the whole simulation, don't say i didn't warn you!
+
 export const G = 6.67430e-11;            // gravitational constant  [m^3 kg^-1 s^-2]
 export const DEG = Math.PI / 180;        // deg -> rad
 export const RAD = 180 / Math.PI;        // rad -> deg
