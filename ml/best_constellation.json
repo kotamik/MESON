@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "description": "Optimised lunar south-pole constellation",
+    "generated": "2026-07-29 15:26:58",
+    "frame": "Moon-centred lunar-equatorial elements; SI units / radians",
+    "dynamics": "Full Sun+Earth+Moon point-mass N-body, RK4 (matches sandbox)",
+    "coverage": 0.9980012786113045,
+    "max_gap_s": 2850.0,
+    "avg_visible": 1.1445876478542858,
+    "n_sats": 2,
+    "fitness": 139.9055219289713,
+    "deorbits": 0,
+    "min_elevation_deg": 5.0,
+    "verify_days": 730
+  },
+  "satellites": [
+    {
+      "a": 9737400.0,
+      "e": 0.5075622197039105,
+      "i": 2.4602643940578295,
+      "om": 2.028780975620169,
+      "w": 1.4948319043220837,
+      "M": 6.283185307179586
+    },
+    {
+      "a": 9737400.0,
+      "e": 0.024259415460862997,
+      "i": 2.2731312160902593,
+      "om": 5.817088732892291,
+      "w": 5.558378606871789,
+      "M": 5.574633667030182
+    }
+  ]
+}
