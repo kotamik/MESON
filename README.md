@@ -21,7 +21,7 @@ pip install -r ml/requirements.txt
 py ml/optimize_constellation.py    # writes ml/best_constellation.json
 ```
 
-Then, configure the optimizer pipeline by editing the variables in ml/config.py
+Then, configure the optimizer pipeline by editing the variables in ml/config.py.
 
 ## Guide
 
