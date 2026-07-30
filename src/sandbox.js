@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import {
-  SUN, EARTH, MOON, DAY, m2u, RADIUS_GAIN,
+  SUN, EARTH, MOON, DAY, JUPITER, m2u, RADIUS_GAIN,
 } from './constants.js';
 import { elementsToState } from './orbital.js';
 import { equatorialToEcliptic, identity } from './frames.js';
@@ -14,7 +14,7 @@ const J2000_MS = Date.UTC(2000, 0, 1, 12, 0, 0);   // epoch as a js timestamp
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 
 export function createSandbox(container) {
-  const { sim, sun, earth, moon } = buildSystem();
+  const { sim, sun, earth, moon, jupiter } = buildSystem();
   const bodyByName = { Sun: sun, Earth: earth, Moon: moon };
 
   // renderer / scene / camera
@@ -43,7 +43,7 @@ export function createSandbox(container) {
 
   // body visuals
   const visuals = {};
-  for (const def of [SUN, EARTH, MOON]) {
+  for (const def of [SUN, EARTH, MOON, JUPITER]) {
     const b = bodyByName[def.name];
     visuals[def.name] = makeBodyVisual(def, scene, b === sun);
   }
@@ -69,6 +69,7 @@ export function createSandbox(container) {
   const trails = {
     Earth: makeTrail(scene, 0x3a6fd0, 1500, 400 * DAY),   // ~a full heliocentric orbit
     Moon:  makeTrail(scene, 0x888888, 1200, 30 * DAY),    // ~a full lunar orbit
+    Jupiter: makeTrail(scene, 0xfc9e44, 2000, 4300 * DAY),
   };
 
   // satellites: { body, mesh, trail, def }
@@ -231,6 +232,7 @@ export function createSandbox(container) {
     // the trail decides for itself whether enough sim-time has passed to sample
     trails.Earth.push(rel(earth.pos, sun.pos), sim.time);
     trails.Moon.push(rel(moon.pos, earth.pos), sim.time);   // geocentric trail
+    trails.Jupiter.push(rel(jupiter.pos, sun.pos), sim.time);
     for (const s of satellites) {
       const parent = s.def.parentName === 'Earth' ? earth : moon;
       s.trail.push(rel(s.body.pos, parent.pos), sim.time);
@@ -239,7 +241,7 @@ export function createSandbox(container) {
 
   function updateVisuals(now) {
     // meshes track the physics, and spin about their tilted axes
-    for (const def of [SUN, EARTH, MOON]) {
+    for (const def of [SUN, EARTH, MOON, JUPITER]) {
       const b = bodyByName[def.name];
       const v = visuals[def.name];
       v.group.position.set(m2u(b.pos[0]), m2u(b.pos[1]), m2u(b.pos[2]));
@@ -253,6 +255,7 @@ export function createSandbox(container) {
 
     // trails live in each parent's frame, so move their origins along
     trails.Earth.group.position.copy(visuals.Sun.group.position);
+    trails.Jupiter.group.position.copy(visuals.Sun.group.position);
     trails.Moon.group.position.copy(visuals.Earth.group.position);
 
     // pole marker + axis ride the moon and go green when we have coverage
@@ -298,8 +301,8 @@ export function createSandbox(container) {
   // a different perturbation phase - and behave nothing like the reported result.
   api.resetEpoch = function () {
     const fresh = buildSystem();
-    const src = { Sun: fresh.sun, Earth: fresh.earth, Moon: fresh.moon };
-    for (const name of ['Sun', 'Earth', 'Moon']) {
+    const src = { Sun: fresh.sun, Earth: fresh.earth, Moon: fresh.moon, Jupiter: fresh.jupiter};
+    for (const name of ['Sun', 'Earth', 'Moon', 'Jupiter']) {
       const s = src[name], d = bodyByName[name];
       d.pos[0] = s.pos[0]; d.pos[1] = s.pos[1]; d.pos[2] = s.pos[2];
       d.vel[0] = s.vel[0]; d.vel[1] = s.vel[1]; d.vel[2] = s.vel[2];
