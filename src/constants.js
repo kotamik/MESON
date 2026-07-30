@@ -16,6 +16,7 @@ export const YEAR = 365.25 * DAY;        // julian year             [s]
 export const GM_SUN   = 1.32712440018e20;
 export const GM_EARTH = 3.986004418e14;
 export const GM_MOON  = 4.9028695e12;
+export const GM_JUPITER = 1.26686534e17;
 
 // the bodies. keplerian elements are osculating mean elements at j2000, in the
 // j2000 ecliptic frame:
@@ -85,7 +86,28 @@ export const MOON = {
   refRadius: 1.7374e6,                   // reference radius for those harmonics
 };
 
-export const BODIES = [SUN, EARTH, MOON];
+export const JUPITER = {
+  name: 'Earth',
+  mass: 1.898125e27,
+  GM: GM_JUPITER,
+  radius: 6.991e7,                       
+  equatorialRadius: 7.1492e7,
+  color: 0xfc9e44,
+  parent: 'sun',
+  elements: {
+    a:  5.204267 * AU,
+    e:  0.048775,
+    i: 1.3033 * DEG,
+    om: 100.556 * DEG,                       
+    w:  14.753 * DEG,              
+    M: (20.020) * DEG,             
+  },
+  rotationPeriod: 35729.7,            
+  axialTilt: 3.13 * DEG,            
+  J2: 1.08263e-3,
+};
+
+export const BODIES = [SUN, EARTH, MOON, JUPITER];
 
 // render scale. the real system spans ~1.5e11 m and webgl is happier with O(1)
 // numbers, so 1 scene unit = 1e6 m (1000 km). RADIUS_GAIN can fatten the bodies
