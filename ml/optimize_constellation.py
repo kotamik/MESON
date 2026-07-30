@@ -32,7 +32,9 @@ import os
 import sys
 import time
 import math
+import winsound
 import numpy as np
+import config as cf
 
 # numba does the heavy lifting: it JIT-compiles the tight integration loops to
 # native code and runs the population evaluation across every cpu core (prange).
@@ -58,7 +60,7 @@ except Exception:
 
 rng = np.random.default_rng(42)
 
-# real constants, kept in sync with src/constants.js
+# real constants, kept in sync with src/constants.js (don't edit)
 GM_SUN   = 1.32712440018e20
 GM_EARTH = 3.986004418e14
 GM_MOON  = 4.9028695e12
@@ -79,7 +81,7 @@ MOON_EL  = dict(a=3.84399e8, e=0.0549, i=5.145 * DEG, om=125.08 * DEG,
 
 # south pole direction in the ecliptic frame (equator tilted about x)
 SOUTH_DIR = np.array([0.0, np.sin(MOON_TILT), -np.cos(MOON_TILT)])
-# past this a sat has left the system - count it as deorbited (matches the sandbox)
+# past this a sat has left the system - count it as deorbited 
 ESCAPE = 5 * EARTH_EL["a"]
 
 # search bounds for one sat's normalised [0,1] genes.
@@ -90,20 +92,20 @@ ESCAPE = 5 * EARTH_EL["a"]
 # staying low keeps the coverage reproducible.
 A_MIN = R_MOON + 150e3
 A_MAX = R_MOON + 8000e3
-E_MAX = 0.55
+E_MAX = cf.EMX
 GENES = 6
 
 # GA window is two full years - a realistic mission lifetime. long enough that
 # the slow earth-driven kozai cycles play out many times over during the search,
 # so the GA can't reward an orbit that just survives a short horizon and then
 # falls apart.
-DURATION     = 2 * YEAR
-DT           = 300.0          # 5-min steps. numba makes this cheap, so the GA now
+DURATION     = cf.DUR* YEAR
+DT           = cf.DTS          # 5-min steps. numba makes this cheap, so the GA now
                               # scores at the same fidelity it's verified at
 
-MIN_ELEV     = 5 * DEG
-MIN_PERI_ALT = 100e3
-APO_SOFT     = 9000e3         # apoapsis altitude past which perturbations start to bite
+MIN_ELEV     = cf.MEV * DEG
+MIN_PERI_ALT = cf.MPA
+APO_SOFT     = cf.APS        # apoapsis altitude past which perturbations start to bite
 
 
 # orbital mechanics
@@ -597,12 +599,12 @@ def optimise(max_n=8, pop_size=140, generations=140, verbose=True):
 # main
 def main():
     print("=" * 72)
-    print(" lunar south-pole constellation optimizer")
-    print(" GA + numpy MLP surrogate  ·  full sun+earth+moon n-body (sandbox-exact)")
+    print(" Lunar South-Pole Constellation Optimizer")
+    print(" GA + numpy MLP surrogate  ·  Full Sun+Earth+Moon N-body")
     if HAVE_NUMBA:
-        print(f" backend: numba, {get_num_threads()} threads  (compiling kernels on first call...)")
+        print(f" Backend: Numba, {get_num_threads()} threads  (compiling kernels on first call...)")
     else:
-        print(" backend: numpy fallback (single-core). run 'pip install numba' for a big speedup.")
+        print(" Backend: Numpy fallback (single-core). Run 'pip install numba' for a huge speedup.")
     print("=" * 72)
     t0 = time.time()
     best, history = optimise()
@@ -632,6 +634,8 @@ def main():
     print("-" * 72)
     print(f"   {'#':>2} {'a(km)':>9} {'alt_peri':>9} {'alt_apo':>9} {'e':>6} "
           f"{'i(°)':>7} {'Ω(°)':>6} {'ω(°)':>6} {'T(h)':>6}")
+    if cf.CNS == True:
+        winsound.PlaySound("ding.wav", winsound.SND_FILENAME)
     sats = []
     for k in range(n):
         a, e, i, om, w, M = el[k]
@@ -660,8 +664,8 @@ def main():
             f.write(f"{g},{ff:.4f},{c:.6f},{ns}\n")
 
     print("-" * 72)
-    print(f" wrote {os.path.join(here, 'best_constellation.json')}")
-    print(f" done in {time.time()-t0:.1f}s - load it with 'Import Python result' in the sandbox.")
+    print(f" Wrote {os.path.join(here, 'best_constellation.json')}")
+    print(f" Done in {time.time()-t0:.1f}s - load it with 'Import Python result' in the sandbox.")
 
 
 if __name__ == "__main__":

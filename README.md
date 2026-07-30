@@ -14,7 +14,8 @@ py serve.py                        # serves http://localhost:8000
 
 Then open http://localhost:8000 in a browser.
 
-To (optionally) run the offline constellation optimizer (~2 minutes with numba, which the install below sets up):
+To (optionally) run the offline constellation optimizer, first edit the variables 
+in ml/config.py, then run the commands below:
 
 ```bash
 pip install -r ml/requirements.txt
