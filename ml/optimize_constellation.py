@@ -177,9 +177,9 @@ def _accel_bodies(P, GMs):
 # --- numba kernels: 3-body ephemeris integration -----------------------------
 @njit
 def _acc3(P, GMs):
-    A = np.zeros((3, 3))
-    for i in range(3):
-        for j in range(3):
+    A = np.zeros((4, 3))
+    for i in range(4):
+        for j in range(4):
             if i == j:
                 continue
             dx = P[j, 0] - P[i, 0]; dy = P[j, 1] - P[i, 1]; dz = P[j, 2] - P[i, 2]
@@ -222,8 +222,19 @@ def build_ephemeris(duration, hdt):
     es = _state1(EARTH_EL, GM_SUN)
     ms = _state1(MOON_EL, GM_EARTH)
     js = _state1(JUPITER_EL, GM_SUN)
-    P = np.array([np.zeros(3), es[:3], es[:3] + ms[:3] + js[:3]])
-    V = np.array([np.zeros(3), es[3:], es[3:] + ms[3:] + js[3:]])
+    P = np.array([
+    np.zeros(3),        # Sun
+    es[:3],             # Earth
+    es[:3] + ms[:3],    # Moon (Earth + Moon relative)
+    es[:3] + js[:3]     # Jupiter (Earth + Jupiter relative)
+    ])
+
+    V = np.array([
+    np.zeros(3),
+    es[3:],             # Earth velocity
+    es[3:] + ms[3:],    # Moon velocity
+    es[3:] + js[3:]     # Jupiter velocity
+    ])
     V -= (masses[:, None] * V).sum(0) / masses.sum()        # zero out barycentre drift
     moon0 = dict(pos=P[2].copy(), vel=V[2].copy())
 
@@ -474,7 +485,7 @@ def evaluate_population(genomes, max_n, eph, dt=DT):
         cov, gap, avgv, deo = _eval_pop_kernel(
             s0, ns,
             np.ascontiguousarray(eph["sunP"]), np.ascontiguousarray(eph["earthP"]),
-            np.ascontiguousarray(eph["moonP"]),
+            np.ascontiguousarray(eph["moonP"]), np.ascontiguousarray(eph["jupiterP"]),
             float(dt), sin_min, float(R_MOON), float(ESCAPE),
             np.ascontiguousarray(SOUTH_DIR), int(steps))
     else:
