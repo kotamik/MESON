@@ -467,8 +467,8 @@ def fitness_from_stats(el, n, stats):
                           np.std(el[:, 2] * RAD) / 30 + np.std(el[:, 1]) / 0.3))
     constant = stats["coverage"] >= 0.999 and gap_h < 0.1
     deorb = int(stats.get("deorbits", 0))
-    F = (100 * stats["coverage"] - 8 * n - 0.5 * gap_h - 5 * lon - 3 * cmplx +
-         (60 if constant else 0) - 300 * hard - 300 * deorb)
+    F = (100 * stats["coverage"] - cf.NOS * n - cf.GAP * gap_h - cf.LON * lon - cf.CPX * cmplx +
+         (cf.COV if constant else 0) - cf.DOP * hard - cf.DOP * deorb)
     return F
 
 
