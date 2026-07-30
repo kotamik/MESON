@@ -1,3 +1,6 @@
+Jupiter Branch: adds Jupiter as an attractor and physical body in both the 
+optimization pipeline and the sandbox
+
 # MESON
 
 A 3D N-body sandbox of the Sun–Earth–Moon system with live gravity, custom
