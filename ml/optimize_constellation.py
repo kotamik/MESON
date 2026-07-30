@@ -64,7 +64,8 @@ rng = np.random.default_rng(42)
 GM_SUN   = 1.32712440018e20
 GM_EARTH = 3.986004418e14
 GM_MOON  = 4.9028695e12
-M_SUN, M_EARTH, M_MOON = 1.98847e30, 5.97219e24, 7.342e22
+GM_JUPITER = 1.26686534e17
+M_SUN, M_EARTH, M_MOON, M_JUPITER = 1.98847e30, 5.97219e24, 7.342e22, 1.898125e27
 R_MOON   = 1.7374e6
 DAY      = 86400.0
 YEAR     = 365.25 * DAY
@@ -78,6 +79,8 @@ EARTH_EL = dict(a=1.00000261 * AU, e=0.01671123, i=-0.00001531 * DEG,
                 M=(100.46457166 - 102.93768193) * DEG)
 MOON_EL  = dict(a=3.84399e8, e=0.0549, i=5.145 * DEG, om=125.08 * DEG,
                 w=318.15 * DEG, M=135.27 * DEG)
+JUPITER_EL = dict(a=5.204267 * AU, e=0.048775, i=1.3033 * DEG, om=100.556 * DEG,
+                w=14.753 * DEG, M=(20.020) * DEG,)              
 
 # south pole direction in the ecliptic frame (equator tilted about x)
 SOUTH_DIR = np.array([0.0, np.sin(MOON_TILT), -np.cos(MOON_TILT)])
@@ -188,13 +191,14 @@ def _acc3(P, GMs):
 
 @njit
 def _prop_bodies3(n, hdt, P0, V0, GMs):
-    sunP = np.empty((n, 3)); earthP = np.empty((n, 3)); moonP = np.empty((n, 3))
+    sunP = np.empty((n, 3)); earthP = np.empty((n, 3)); moonP = np.empty((n, 3)); jupiterP = np.empty((n, 3))
     P = P0.copy(); V = V0.copy()
     h2 = hdt * 0.5
     for k in range(n):
         sunP[k, 0] = P[0, 0]; sunP[k, 1] = P[0, 1]; sunP[k, 2] = P[0, 2]
         earthP[k, 0] = P[1, 0]; earthP[k, 1] = P[1, 1]; earthP[k, 2] = P[1, 2]
         moonP[k, 0] = P[2, 0]; moonP[k, 1] = P[2, 1]; moonP[k, 2] = P[2, 2]
+        jupiterP[k, 0] = P[3, 0]; jupiterP[k, 1] = P[3, 1]; jupiterP[k,2] = P[3, 2]
         if k == n - 1:
             break
         A1 = _acc3(P, GMs)
@@ -206,29 +210,30 @@ def _prop_bodies3(n, hdt, P0, V0, GMs):
         A4 = _acc3(P4, GMs)
         P = P + (hdt / 6.0) * (V + 2.0 * V2 + 2.0 * V3 + V4)
         V = V + (hdt / 6.0) * (A1 + 2.0 * A2 + 2.0 * A3 + A4)
-    return sunP, earthP, moonP
+    return sunP, earthP, moonP, jupiterP
 
 
 def build_ephemeris(duration, hdt):
     key = (duration, hdt)
     if key in _EPH:
         return _EPH[key]
-    GMs = np.array([GM_SUN, GM_EARTH, GM_MOON])
-    masses = np.array([M_SUN, M_EARTH, M_MOON])
+    GMs = np.array([GM_SUN, GM_EARTH, GM_MOON, GM_JUPITER])
+    masses = np.array([M_SUN, M_EARTH, M_MOON, M_JUPITER])
     es = _state1(EARTH_EL, GM_SUN)
     ms = _state1(MOON_EL, GM_EARTH)
-    P = np.array([np.zeros(3), es[:3], es[:3] + ms[:3]])
-    V = np.array([np.zeros(3), es[3:], es[3:] + ms[3:]])
+    js = _state1(JUPITER_EL, GM_SUN)
+    P = np.array([np.zeros(3), es[:3], es[:3] + ms[:3] + js[:3]])
+    V = np.array([np.zeros(3), es[3:], es[3:] + ms[3:] + js[3:]])
     V -= (masses[:, None] * V).sum(0) / masses.sum()        # zero out barycentre drift
     moon0 = dict(pos=P[2].copy(), vel=V[2].copy())
 
     n = int(round(duration / hdt)) + 1
     if HAVE_NUMBA:
-        sunP, earthP, moonP = _prop_bodies3(n, float(hdt), P.copy(), V.copy(), GMs)
+        sunP, earthP, moonP, jupiterP = _prop_bodies3(n, float(hdt), P.copy(), V.copy(), GMs)
     else:
-        sunP = np.empty((n, 3)); earthP = np.empty((n, 3)); moonP = np.empty((n, 3))
+        sunP = np.empty((n, 3)); earthP = np.empty((n, 3)); moonP = np.empty((n, 3)); jupiterP = np.empty((n, 3))
         for k in range(n):
-            sunP[k], earthP[k], moonP[k] = P[0], P[1], P[2]
+            sunP[k], earthP[k], moonP[k], jupiterP[k] = P[0], P[1], P[2], P[3]
             if k == n - 1:
                 break
             a1 = _accel_bodies(P, GMs)
@@ -240,7 +245,7 @@ def build_ephemeris(duration, hdt):
             a4 = _accel_bodies(P4, GMs)
             P = P + (hdt / 6) * (V + 2 * V2 + 2 * V3 + V4)
             V = V + (hdt / 6) * (a1 + 2 * a2 + 2 * a3 + a4)
-    eph = dict(hdt=hdt, n=n, sunP=sunP, earthP=earthP, moonP=moonP, moon0=moon0)
+    eph = dict(hdt=hdt, n=n, sunP=sunP, earthP=earthP, moonP=moonP, jupiterP=jupiterP, moon0=moon0)
     _EPH[key] = eph
     return eph
 
@@ -268,7 +273,7 @@ def initial_states(el, eph):
 
 def _accel_sat(R, idx, eph):
     A = np.zeros_like(R)
-    for gm, P in ((GM_SUN, eph["sunP"]), (GM_EARTH, eph["earthP"]), (GM_MOON, eph["moonP"])):
+    for gm, P in ((GM_SUN, eph["sunP"]), (GM_EARTH, eph["earthP"]), (GM_MOON, eph["moonP"]), (GM_JUPITER, eph["jupiterP"])):
         D = P[idx][None, :] - R
         r2 = np.einsum("ij,ij->i", D, D)
         A += (gm / (np.sqrt(r2) * r2))[:, None] * D
@@ -315,7 +320,7 @@ def integrate_visibility(states0, eph, dt, sin_min, steps):
 # window and folds down to coverage / max-gap / avg-in-view / deorbit-count, so
 # there's no giant M x steps visibility matrix and no cross-task synchronisation.
 @njit
-def _sat_acc(x, y, z, idx, sunP, earthP, moonP):
+def _sat_acc(x, y, z, idx, sunP, earthP, moonP, jupiterP):
     dx = sunP[idx, 0] - x; dy = sunP[idx, 1] - y; dz = sunP[idx, 2] - z
     r2 = dx * dx + dy * dy + dz * dz; g = GM_SUN / (r2 * math.sqrt(r2))
     ax = g * dx; ay = g * dy; az = g * dz
@@ -325,11 +330,14 @@ def _sat_acc(x, y, z, idx, sunP, earthP, moonP):
     dx = moonP[idx, 0] - x; dy = moonP[idx, 1] - y; dz = moonP[idx, 2] - z
     r2 = dx * dx + dy * dy + dz * dz; g = GM_MOON / (r2 * math.sqrt(r2))
     ax += g * dx; ay += g * dy; az += g * dz
+    dx = jupiterP[idx, 0] - x; dy = jupiterP[idx, 1] - y; dz = jupiterP[idx, 2] - z
+    r2 = dx * dx + dy * dy + dz * dz; g = GM_JUPITER / (r2 * math.sqrt(r2))
+    ax += g * dx; ay += g * dy; az += g * dz
     return ax, ay, az
 
 
 @njit(parallel=True)
-def _eval_pop_kernel(states0, ns, sunP, earthP, moonP, dt, sin_min,
+def _eval_pop_kernel(states0, ns, sunP, earthP, moonP, jupiterP, dt, sin_min,
                      R_moon, escape, south, steps):
     P = states0.shape[0]
     max_n = states0.shape[1]
@@ -383,16 +391,16 @@ def _eval_pop_kernel(states0, ns, sunP, earthP, moonP, dt, sin_min,
                 if not alive[j]:
                     continue
                 x = rx[j]; y = ry[j]; z = rz[j]; ax0 = vx[j]; ay0 = vy[j]; az0 = vz[j]
-                a1x, a1y, a1z = _sat_acc(x, y, z, ei, sunP, earthP, moonP)
+                a1x, a1y, a1z = _sat_acc(x, y, z, ei, sunP, earthP, moonP, jupiterP)
                 x2 = x + ax0 * hdt; y2 = y + ay0 * hdt; z2 = z + az0 * hdt
                 v2x = ax0 + a1x * hdt; v2y = ay0 + a1y * hdt; v2z = az0 + a1z * hdt
-                a2x, a2y, a2z = _sat_acc(x2, y2, z2, ei + 1, sunP, earthP, moonP)
+                a2x, a2y, a2z = _sat_acc(x2, y2, z2, ei + 1, sunP, earthP, moonP, jupiterP)
                 x3 = x + v2x * hdt; y3 = y + v2y * hdt; z3 = z + v2z * hdt
                 v3x = ax0 + a2x * hdt; v3y = ay0 + a2y * hdt; v3z = az0 + a2z * hdt
-                a3x, a3y, a3z = _sat_acc(x3, y3, z3, ei + 1, sunP, earthP, moonP)
+                a3x, a3y, a3z = _sat_acc(x3, y3, z3, ei + 1, sunP, earthP, moonP, jupiterP)
                 x4 = x + v3x * dt; y4 = y + v3y * dt; z4 = z + v3z * dt
                 v4x = ax0 + a3x * dt; v4y = ay0 + a3y * dt; v4z = az0 + a3z * dt
-                a4x, a4y, a4z = _sat_acc(x4, y4, z4, ei + 2, sunP, earthP, moonP)
+                a4x, a4y, a4z = _sat_acc(x4, y4, z4, ei + 2, sunP, earthP, moonP, jupiterP)
                 rx[j] = x + dt6 * (ax0 + 2.0 * v2x + 2.0 * v3x + v4x)
                 ry[j] = y + dt6 * (ay0 + 2.0 * v2y + 2.0 * v3y + v4y)
                 rz[j] = z + dt6 * (az0 + 2.0 * v2z + 2.0 * v3z + v4z)
