@@ -15,7 +15,7 @@ const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 
 export function createSandbox(container) {
   const { sim, sun, earth, moon, jupiter } = buildSystem();
-  const bodyByName = { Sun: sun, Earth: earth, Moon: moon };
+  const bodyByName = { Sun: sun, Earth: earth, Moon: moon, Jupiter: jupiter };
 
   // renderer / scene / camera
   const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
@@ -367,6 +367,7 @@ export function createSandbox(container) {
     consider(visuals.Sun.group, 'Sun');
     consider(visuals.Earth.group, 'Earth');
     consider(visuals.Moon.group, 'Moon');
+    consider(visuals.Jupiter.group, 'Jupiter');
     for (const s of satellites) consider(s.mesh, null);
     return best;
   }

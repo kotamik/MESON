@@ -10,7 +10,7 @@
 // sandbox does for user sats. the south-pole ground point
 // P(t) = MoonPos(t) + southDir*R_moon rides along with the moving moon.
 
-import { GM_SUN, GM_EARTH, GM_MOON, MOON, EARTH, DAY, DEG } from './constants.js';
+import { GM_SUN, GM_EARTH, GM_MOON, GM_JUPITER, MOON, EARTH, DAY, JUPITER, DEG } from './constants.js';
 import { elementsToState } from './orbital.js';
 import { equatorialToEcliptic } from './frames.js';
 import { computeEphemeris } from './ephemeris.js';
@@ -25,7 +25,7 @@ const ESCAPE = 5 * EARTH.elements.a;
 function accel(r, idx, eph) {
   let ax = 0, ay = 0, az = 0;
   const bodies = [
-    [GM_SUN, eph.sunP], [GM_EARTH, eph.earthP], [GM_MOON, eph.moonP],
+    [GM_SUN, eph.sunP], [GM_EARTH, eph.earthP], [GM_MOON, eph.moonP] [GM_JUPITER, eph.jupiterP],
   ];
   for (const [gm, P] of bodies) {
     const dx = P[idx * 3] - r[0];

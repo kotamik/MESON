@@ -102,7 +102,7 @@ $('oImport').onclick = async () => {
     const data = await res.json();
     sandbox.resetEpoch();             // deploy at the epoch it was designed for
     sandbox.clearSatellites();
-    const colors = [0x33ff88, 0x6ee7ff, 0xffc451, 0xff7ad9, 0x9bff6e, 0xffa14f, 0xc792ff, 0xff5e5e];
+    const colors = [0x33ff88, 0x6ee7ff, 0xffc451, 0xff7ad9, 0x9bff6e, 0xffa14f, 0xc792ff, 0xff5e5e, 0xfc9e44];
     data.satellites.forEach((el, i) =>
       sandbox.addSatellite(el, 'Moon', 'equator', colors[i % colors.length]));
     sandbox.snapTo('Moon');
