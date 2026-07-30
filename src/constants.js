@@ -87,7 +87,7 @@ export const MOON = {
 };
 
 export const JUPITER = {
-  name: 'Earth',
+  name: 'Jupiter',
   mass: 1.898125e27,
   GM: GM_JUPITER,
   radius: 6.991e7,                       

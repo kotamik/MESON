@@ -25,10 +25,11 @@ export function buildSystem() {
     pos: add(earth.pos, mState.pos), vel: add(earth.vel, mState.vel) });
   
   const jState = elementsToState(JUPITER.elements, SUN.GM)
-  const jupiter = sim.addBody({ ...meta(JUPITER)})
+  const jupiter = sim.addBody({ ...meta(JUPITER),
+    pos: jState.pos.slice(), vel: jState.vel.slice() });
 
   zeroBarycentreDrift(sim.bodies, [SUN.mass, EARTH.mass, MOON.mass, JUPITER.mass]);
-  return { sim, sun, earth, moon };
+  return { sim, sun, earth, moon, jupiter };
 }
 
 // precompute sun/earth/moon positions on a fixed grid (step = hdt), plus the
